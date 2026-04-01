@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>团队记账 - 双人协作</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .tab-active {
+            color: #7c3aed;
+            border-bottom: 2px solid #7c3aed;
+        }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+            color: white;
+        }
+        .status-pending { background: #fef3c7; color: #92400e; }
+        .status-confirmed { background: #d1fae5; color: #065f46; }
+        .status-rejected { background: #fee2e2; color: #991b1b; }
+        .fade-in { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <!-- 登录页面 -->
+    <div id="login-page" class="min-h-screen bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
+            <div class="text-center mb-8">
+                <div class="text-4xl mb-2">💰</div>
+                <h1 class="text-2xl font-bold text-gray-800">团队记账</h1>
+                <p class="text-gray-500 text-sm mt-1">双人协作，账目清晰</p>
+            </div>
+
+            <!-- 选择账户 -->
+            <div id="login-step-select">
+                <p class="text-center text-gray-600 mb-4">请选择您的账户</p>
+                <div class="space-y-3">
+                    <button onclick="selectAccount('user1')" class="w-full p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 transition flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xl">A</div>
+                        <div class="text-left">
+                            <div class="font-semibold text-gray-800" id="select-name-1">用户A</div>
+                            <div class="text-xs text-gray-500" id="select-status-1">未设置</div>
+                        </div>
+                    </button>
+                    <button onclick="selectAccount('user2')" class="w-full p-4 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-xl">B</div>
+                        <div class="text-left">
+                            <div class="font-semibold text-gray-800" id="select-name-2">用户B</div>
+                            <div class="text-xs text-gray-500" id="select-status-2">未设置</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 设置账户（首次） -->
+            <div id="login-step-setup" class="hidden">
+                <button onclick="backToSelect()" class="text-gray-500 mb-4">← 返回</button>
+                <h2 class="text-xl font-bold mb-4">设置账户</h2>
+                <input type="text" id="setup-username" placeholder="输入您的姓名" class="w-full p-3 border rounded-lg mb-3">
+                <input type="password" id="setup-password" placeholder="设置密码（至少4位）" class="w-full p-3 border rounded-lg mb-4">
+                <button onclick="completeSetup()" class="w-full btn-primary py-3 rounded-lg font-semibold">完成设置</button>
+            </div>
+
+            <!-- 登录（已设置） -->
+            <div id="login-step-login" class="hidden">
+                <button onclick="backToSelect()" class="text-gray-500 mb-4">← 返回</button>
+                <h2 class="text-xl font-bold mb-1" id="login-welcome">欢迎回来</h2>
+                <p class="text-gray-500 text-sm mb-4">请输入密码登录</p>
+                <input type="password" id="login-password" placeholder="输入密码" class="w-full p-3 border rounded-lg mb-4">
+                <label class="flex items-center gap-2 mb-4 text-sm text-gray-600">
+                    <input type="checkbox" id="remember-me"> 记住我
+                </label>
+                <button onclick="doLogin()" class="w-full btn-primary py-3 rounded-lg font-semibold">登录</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主应用 -->
+    <div id="main-app" class="hidden min-h-screen bg-gray-100">
+        <!-- 顶部栏 -->
+        <header class="bg-white shadow-sm sticky top-0 z-10">
+            <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div id="header-avatar" class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">A</div>
+                    <div>
+                        <h1 class="font-bold text-gray-800">团队记账</h1>
+                        <p class="text-xs text-gray-500" id="header-username">用户A</p>
+                    </div>
+                </div>
+                <button onclick="doLogout()" class="text-gray-500 hover:text-gray-700">退出</button>
+            </div>
+        </header>
+
+        <!-- 导航标签 -->
+        <nav class="bg-white border-b">
+            <div class="max-w-lg mx-auto flex">
+                <button onclick="switchTab('my-records')" class="tab-btn flex-1 py-3 text-sm font-medium tab-active" data-tab="my-records">
+                    我的记账
+                </button>
+                <button onclick="switchTab('pending')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="pending">
+                    待确认 <span id="pending-badge" class="hidden bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
+                </button>
+                <button onclick="switchTab('all-records')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="all-records">
+                    所有账目
+                </button>
+                <button onclick="switchTab('settlement')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="settlement">
+                    核算
+                </button>
+                <button onclick="switchTab('ai-analysis')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="ai-analysis">
+                    AI分析
+                </button>
+            </div>
+        </nav>
+
+        <!-- 内容区 -->
+        <main class="max-w-lg mx-auto p-4">
+            <!-- 我的记账 -->
+            <div id="tab-my-records" class="tab-content">
+                <!-- 快速记账 -->
+                <div class="card p-4 mb-4">
+                    <h3 class="font-semibold mb-3">快速记账</h3>
+                    <input type="text" id="quick-input" placeholder="例如：午餐 35" class="w-full p-3 border rounded-lg mb-3">
+                    <div class="flex gap-2 mb-3">
+                        <select id="record-type" class="flex-1 p-2 border rounded-lg">
+                            <option value="expense">支出</option>
+                            <option value="income">收入</option>
+                        </select>
+                        <select id="record-category" class="flex-1 p-2 border rounded-lg">
+                            <option value="餐饮">餐饮</option>
+                            <option value="交通">交通</option>
+                            <option value="购物">购物</option>
+                            <option value="娱乐">娱乐</option>
+                            <option value="住房">住房</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <button onclick="addRecord()" class="w-full btn-primary py-3 rounded-lg font-semibold">提交记账（待对方确认）</button>
+                </div>
+
+                <!-- 我的待确认 -->
+                <div class="card p-4">
+                    <h3 class="font-semibold mb-3">我提交的待确认</h3>
+                    <div id="my-pending-list" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- 待确认 -->
+            <div id="tab-pending" class="tab-content hidden">
+                <div class="card p-4">
+                    <h3 class="font-semibold mb-3">需要我确认的账目</h3>
+                    <div id="pending-confirm-list" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- 所有账目 -->
+            <div id="tab-all-records" class="tab-content hidden">
+                <div class="card p-4 mb-4">
+                    <div class="flex gap-2 mb-4">
+                        <button onclick="filterAll('all')" class="filter-btn flex-1 py-2 rounded-lg bg-purple-100 text-purple-700 text-sm font-medium">全部</button>
+                        <button onclick="filterAll('user1')" class="filter-btn flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium" id="filter-btn-1">A的</button>
+                        <button onclick="filterAll('user2')" class="filter-btn flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium" id="filter-btn-2">B的</button>
+                    </div>
+                    <div id="all-records-list" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- 核算 -->
+            <div id="tab-settlement" class="tab-content hidden">
+                <div class="card p-4 mb-4">
+                    <h3 class="font-semibold mb-4">团队核算</h3>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-blue-50 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-blue-600" id="stat-user1-total">0</div>
+                            <div class="text-sm text-blue-500" id="stat-user1-name">A的支出</div>
+                        </div>
+                        <div class="bg-orange-50 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-orange-600" id="stat-user2-total">0</div>
+                            <div class="text-sm text-orange-500" id="stat-user2-name">B的支出</div>
+                        </div>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded-lg text-center mb-4">
+                        <div class="text-lg text-purple-700" id="settlement-result">核算中...</div>
+                    </div>
+                </div>
+
+                <div class="card p-4">
+                    <h3 class="font-semibold mb-3">分类统计</h3>
+                    <canvas id="category-chart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- AI分析 -->
+            <div id="tab-ai-analysis" class="tab-content hidden">
+                <div class="card p-4 mb-4">
+                    <h3 class="font-semibold mb-4">🤖 DeepSeek AI分析</h3>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm text-gray-600 mb-1">API密钥</label>
+                        <input type="password" id="api-key" placeholder="输入您的DeepSeek API密钥" 
+                            class="w-full p-3 border rounded-lg text-sm">
+                        <p class="text-xs text-gray-400 mt-1">
+                            密钥保存在本地，不会上传
+                        </p>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm text-gray-600 mb-1">分析周期</label>
+                        <select id="analysis-period" class="w-full p-3 border rounded-lg">
+                            <option value="today">今日</option>
+                            <option value="week">本周</option>
+                            <option value="month" selected>本月</option>
+                            <option value="year">本年</option>
+                            <option value="all">全部</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="block text-sm text-gray-600 mb-1">分析类型</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="doAnalysis('independent')" 
+                                class="p-3 border-2 border-purple-200 bg-purple-50 rounded-lg text-sm font-medium text-purple-700 hover:bg-purple-100 transition">
+                                独立分析
+                            </button>
+                            <button onclick="doAnalysis('overall')" 
+                                class="p-3 border-2 border-blue-200 bg-blue-50 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100 transition">
+                                统筹分析
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold">分析结果</h3>
+                    </div>
+                    <div id="analysis-result" class="text-sm text-gray-600 whitespace-pre-line">
+                        <p class="text-gray-400 text-center py-4">
+                            点击上方按钮开始分析
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg hidden z-50"></div>
+
+    <script>
+        // ==================== 数据存储 ====================
+        const Storage = {
+            get(key) {
+                const data = localStorage.getItem(key);
+                return data ? JSON.parse(data) : null;
+            },
+            set(key, value) {
+                localStorage.setItem(key, JSON.stringify(value));
+            },
+            remove(key) {
+                localStorage.removeItem(key);
+            }
+        };
+
+        // ==================== 应用状态 ====================
+        let currentUser = null;
+        let selectedAccount = null;
+        let currentFilter = 'all';
+        let categoryChart = null;
+
+        // ==================== 初始化 ====================
+        function init() {
+            updateLoginPage();
+            const saved = Storage.get('current_session');
+            if (saved) {
+                currentUser = saved.userId;
+                showMainApp();
+            }
+        }
+
+        // ==================== 登录页面 ====================
+        function updateLoginPage() {
+            const users = Storage.get('users') || {};
+            
+            // 更新用户1
+            if (users.user1) {
+                document.getElementById('select-name-1').textContent = users.user1.name;
+                document.getElementById('select-status-1').textContent = '已设置';
+                document.getElementById('select-status-1').className = 'text-xs text-green-500';
+            }
+            
+            // 更新用户2
+            if (users.user2) {
+                document.getElementById('select-name-2').textContent = users.user2.name;
+                document.getElementById('select-status-2').textContent = '已设置';
+                document.getElementById('select-status-2').className = 'text-xs text-green-500';
+            }
+        }
+
+        function selectAccount(account) {
+            selectedAccount = account;
+            const users = Storage.get('users') || {};
+            
+            document.getElementById('login-step-select').classList.add('hidden');
+            
+            if (users[account]) {
+                // 已设置，显示登录
+                document.getElementById('login-step-login').classList.remove('hidden');
+                document.getElementById('login-welcome').textContent = `欢迎，${users[account].name}`;
+            } else {
+                // 未设置，显示设置
+                document.getElementById('login-step-setup').classList.remove('hidden');
+            }
+        }
+
+        function backToSelect() {
+            document.getElementById('login-step-select').classList.remove('hidden');
+            document.getElementById('login-step-setup').classList.add('hidden');
+            document.getElementById('login-step-login').classList.add('hidden');
+            document.getElementById('setup-username').value = '';
+            document.getElementById('setup-password').value = '';
+            document.getElementById('login-password').value = '';
+            selectedAccount = null;
+        }
+
+        function completeSetup() {
+            const name = document.getElementById('setup-username').value.trim();
+            const password = document.getElementById('setup-password').value;
+            
+            if (!name) {
+                showToast('请输入姓名');
+                return;
+            }
+            if (password.length < 4) {
+                showToast('密码至少4位');
+                return;
+            }
+            
+            const users = Storage.get('users') || {};
+            users[selectedAccount] = { name, password };
+            Storage.set('users', users);
+            
+            currentUser = selectedAccount;
+            if (document.getElementById('remember-me').checked) {
+                Storage.set('current_session', { userId: currentUser });
+            }
+            
+            showToast('设置成功！');
+            showMainApp();
+        }
+
+        function doLogin() {
+            const password = document.getElementById('login-password').value;
+            const users = Storage.get('users') || {};
+            
+            if (users[selectedAccount].password === password) {
+                currentUser = selectedAccount;
+                if (document.getElementById('remember-me').checked) {
+                    Storage.set('current_session', { userId: currentUser });
+                }
+                showToast('登录成功！');
+                showMainApp();
+            } else {
+                showToast('密码错误');
+            }
+        }
+
+        function doLogout() {
+            currentUser = null;
+            Storage.remove('current_session');
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('login-page').classList.remove('hidden');
+            backToSelect();
+            updateLoginPage();
+        }
+
+        // ==================== 主应用 ====================
+        function showMainApp() {
+            document.getElementById('login-page').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            
+            const users = Storage.get('users') || {};
+            const userName = users[currentUser].name;
+            const avatar = currentUser === 'user1' ? 'A' : 'B';
+            const color = currentUser === 'user1' ? 'bg-blue-500' : 'bg-orange-500';
+            
+            document.getElementById('header-username').textContent = userName;
+            document.getElementById('header-avatar').textContent = avatar;
+            document.getElementById('header-avatar').className = `w-10 h-10 rounded-full ${color} flex items-center justify-center text-white font-bold`;
+            
+            // 更新按钮文字
+            document.getElementById('filter-btn-1').textContent = (users.user1?.name || 'A') + '的';
+            document.getElementById('filter-btn-2').textContent = (users.user2?.name || 'B') + '的';
+            
+            updateAllViews();
+        }
+
+        function switchTab(tab) {
+            // 更新标签样式
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-gray-500');
+            });
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('tab-active');
+            document.querySelector(`[data-tab="${tab}"]`).classList.remove('text-gray-500');
+            
+            // 显示内容
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('fade-in');
+            
+            // 更新数据
+            if (tab === 'my-records') updateMyRecords();
+            if (tab === 'pending') updatePendingList();
+            if (tab === 'all-records') updateAllRecords();
+            if (tab === 'settlement') updateSettlement();
+            if (tab === 'ai-analysis') loadApiKey();
+        }
+
+        // ==================== 记账功能 ====================
+        function addRecord() {
+            const input = document.getElementById('quick-input').value.trim();
+            const type = document.getElementById('record-type').value;
+            const category = document.getElementById('record-category').value;
+            
+            if (!input) {
+                showToast('请输入记账内容');
+                return;
+            }
+            
+            // 解析金额
+            const amountMatch = input.match(/(\d+\.?\d*)/);
+            if (!amountMatch) {
+                showToast('请输入金额');
+                return;
+            }
+            
+            const amount = parseFloat(amountMatch[1]);
+            const description = input.replace(amountMatch[0], '').trim() || category;
+            
+            const record = {
+                id: Date.now(),
+                userId: currentUser,
+                type,
+                amount,
+                category,
+                description,
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            };
+            
+            const records = Storage.get('records') || [];
+            records.push(record);
+            Storage.set('records', records);
+            
+            document.getElementById('quick-input').value = '';
+            showToast('记账已提交，等待对方确认');
+            updateAllViews();
+        }
+
+        function confirmRecord(recordId) {
+            const records = Storage.get('records') || [];
+            const record = records.find(r => r.id === recordId);
+            
+            if (record.userId === currentUser) {
+                showToast('不能确认自己的记账');
+                return;
+            }
+            
+            record.status = 'confirmed';
+            record.confirmedBy = currentUser;
+            record.confirmedAt = new Date().toISOString();
+            Storage.set('records', records);
+            
+            showToast('✅ 已确认');
+            updateAllViews();
+        }
+
+        function rejectRecord(recordId) {
+            if (!confirm('确定要拒绝这条记账吗？')) return;
+            
+            const records = Storage.get('records') || [];
+            const record = records.find(r => r.id === recordId);
+            
+            record.status = 'rejected';
+            record.rejectedBy = currentUser;
+            record.rejectedAt = new Date().toISOString();
+            Storage.set('records', records);
+            
+            showToast('❌ 已拒绝');
+            updateAllViews();
+        }
+
+        function deleteRecord(recordId) {
+            const records = Storage.get('records') || [];
+            const record = records.find(r => r.id === recordId);
+            
+            if (!record) {
+                showToast('记录不存在');
+                return;
+            }
+            
+            if (record.status === 'pending') {
+                // 待确认的直接删除
+                if (!confirm('确定要删除这条记账吗？')) return;
+                let filteredRecords = records.filter(r => r.id !== recordId);
+                Storage.set('records', filteredRecords);
+                showToast('已删除');
+                updateAllViews();
+            } else if (record.status === 'confirmed') {
+                // 已确认的需要对方确认删除
+                if (!confirm('删除需要对方确认，确定要提交删除申请吗？')) return;
+                record.status = 'pending_delete';
+                record.deleteRequestedBy = currentUser;
+                record.deleteRequestedAt = new Date().toISOString();
+                Storage.set('records', records);
+                showToast('删除申请已提交，等待对方确认');
+                updateAllViews();
+            }
+        }
+
+        function confirmDelete(recordId) {
+            const records = Storage.get('records') || [];
+            const record = records.find(r => r.id === recordId);
+            
+            if (!record) {
+                showToast('记录不存在');
+                return;
+            }
+            
+            if (record.deleteRequestedBy === currentUser) {
+                showToast('不能确认自己的删除申请');
+                return;
+            }
+            
+            let filteredRecords = records.filter(r => r.id !== recordId);
+            Storage.set('records', filteredRecords);
+            showToast('✅ 删除已确认');
+            updateAllViews();
+        }
+
+        function rejectDelete(recordId) {
+            if (!confirm('确定要取消删除申请吗？')) return;
+            
+            const records = Storage.get('records') || [];
+            const record = records.find(r => r.id === recordId);
+            
+            if (!record) {
+                showToast('记录不存在');
+                return;
+            }
+            
+            record.status = 'confirmed';
+            delete record.deleteRequestedBy;
+            delete record.deleteRequestedAt;
+            Storage.set('records', records);
+            
+            showToast('删除申请已取消');
+            updateAllViews();
+        }
+
+        // ==================== 更新视图 ====================
+        function updateAllViews() {
+            updateMyRecords();
+            updatePendingList();
+            updateAllRecords();
+            updateSettlement();
+            updateBadge();
+        }
+
+        function updateMyRecords() {
+            const records = Storage.get('records') || [];
+            const myPending = records.filter(r => r.userId === currentUser && r.status === 'pending');
+            
+            const container = document.getElementById('my-pending-list');
+            if (myPending.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-4">暂无待确认的记账</p>';
+                return;
+            }
+            
+            container.innerHTML = myPending.map(r => `
+                <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
+                    <div>
+                        <div class="font-medium">${r.description}</div>
+                        <div class="text-xs text-gray-500">${r.category} · 等待对方确认</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-bold ${r.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+                            ${r.type === 'income' ? '+' : '-'}${r.amount}
+                        </div>
+                        <button onclick="deleteRecord(${r.id})" class="text-xs text-red-500 mt-1">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updatePendingList() {
+            const records = Storage.get('records') || [];
+            const otherUser = currentUser === 'user1' ? 'user2' : 'user1';
+            const pending = records.filter(r => 
+                (r.userId === otherUser && r.status === 'pending') ||
+                (r.status === 'pending_delete' && r.deleteRequestedBy !== currentUser)
+            );
+            
+            const container = document.getElementById('pending-confirm-list');
+            if (pending.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-8">没有需要确认的记账</p>';
+                return;
+            }
+            
+            const users = Storage.get('users') || {};
+            
+            container.innerHTML = pending.map(r => {
+                const isDeleteRequest = r.status === 'pending_delete';
+                const recordUser = isDeleteRequest ? r.userId : otherUser;
+                const userName = users[recordUser]?.name || (recordUser === 'user1' ? 'A' : 'B');
+                
+                let actionButtons = '';
+                if (isDeleteRequest) {
+                    actionButtons = `
+                        <div class="flex gap-2">
+                            <button onclick="confirmDelete(${r.id})" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-medium">✓ 确认删除</button>
+                            <button onclick="rejectDelete(${r.id})" class="flex-1 bg-gray-400 text-white py-2 rounded-lg font-medium">✗ 取消删除</button>
+                        </div>
+                    `;
+                } else {
+                    actionButtons = `
+                        <div class="flex gap-2">
+                            <button onclick="confirmRecord(${r.id})" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-medium">✓ 确认</button>
+                            <button onclick="rejectRecord(${r.id})" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-medium">✗ 拒绝</button>
+                        </div>
+                    `;
+                }
+                
+                return `
+                <div class="p-4 ${isDeleteRequest ? 'bg-red-50 border-2 border-red-200' : 'bg-yellow-50 border-2 border-yellow-200'} rounded-lg">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <div class="font-semibold">${isDeleteRequest ? '[删除申请] ' : ''}${r.description}</div>
+                            <div class="text-sm text-gray-500">${userName} · ${r.category}</div>
+                            <div class="text-xs text-gray-400">${new Date(isDeleteRequest ? r.deleteRequestedAt : r.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div class="font-bold text-lg ${r.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+                            ${r.type === 'income' ? '+' : '-'}${r.amount}
+                        </div>
+                    </div>
+                    ${actionButtons}
+                </div>
+            `;
+            }).join('');
+        }
+
+        function updateAllRecords() {
+            const records = Storage.get('records') || [];
+            const users = Storage.get('users') || {};
+            
+            let filtered = records;
+            if (currentFilter !== 'all') {
+                filtered = records.filter(r => r.userId === currentFilter);
+            }
+            
+            // 只显示已确认的、自己的待确认、pending_delete（所有）
+            filtered = filtered.filter(r => {
+                if (r.status === 'confirmed') return true;
+                if (r.userId === currentUser && r.status === 'pending') return true;
+                if (r.status === 'pending_delete') return true;
+                return false;
+            });
+            
+            filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            
+            const container = document.getElementById('all-records-list');
+            if (filtered.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center py-8">暂无账目</p>';
+                return;
+            }
+            
+            container.innerHTML = filtered.map(r => {
+                const userName = users[r.userId]?.name || (r.userId === 'user1' ? 'A' : 'B');
+                let statusClass, statusText;
+                if (r.status === 'confirmed') {
+                    statusClass = 'status-confirmed';
+                    statusText = '已确认';
+                } else if (r.status === 'pending_delete') {
+                    statusClass = 'status-pending';
+                    statusText = '待删除确认';
+                } else {
+                    statusClass = 'status-pending';
+                    statusText = '待确认';
+                }
+                
+                let deleteBtn = '';
+                if (r.status === 'confirmed') {
+                    deleteBtn = `<button onclick="deleteRecord(${r.id})" class="text-xs text-red-500 mt-1">删除</button>`;
+                }
+                
+                return `
+                    <div class="flex items-center justify-between p-3 bg-white rounded-lg border">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full ${r.userId === 'user1' ? 'bg-blue-500' : 'bg-orange-500'} flex items-center justify-center text-white text-sm font-bold">
+                                ${userName.charAt(0)}
+                            </div>
+                            <div>
+                                <div class="font-medium">${r.description}</div>
+                                <div class="text-xs text-gray-500">${userName} · ${r.category}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold ${r.type === 'income' ? 'text-green-600' : 'text-red-600'}">
+                                ${r.type === 'income' ? '+' : '-'}${r.amount}
+                            </div>
+                            <div class="flex items-center justify-end gap-2">
+                                <span class="text-xs px-2 py-0.5 rounded ${statusClass}">${statusText}</span>
+                            </div>
+                            ${deleteBtn}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function filterAll(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-purple-100', 'text-purple-700');
+                btn.classList.add('bg-gray-100', 'text-gray-600');
+            });
+            event.target.classList.remove('bg-gray-100', 'text-gray-600');
+            event.target.classList.add('bg-purple-100', 'text-purple-700');
+            updateAllRecords();
+        }
+
+        function updateSettlement() {
+            const records = Storage.get('records') || [];
+            const users = Storage.get('users') || {};
+            
+            // 只统计已确认的支出（排除待删除的）
+            const confirmed = records.filter(r => r.status === 'confirmed' && r.type === 'expense');
+            
+            const user1Total = confirmed.filter(r => r.userId === 'user1').reduce((sum, r) => sum + r.amount, 0);
+            const user2Total = confirmed.filter(r => r.userId === 'user2').reduce((sum, r) => sum + r.amount, 0);
+            
+            const user1Name = users.user1?.name || 'A';
+            const user2Name = users.user2?.name || 'B';
+            
+            document.getElementById('stat-user1-total').textContent = user1Total.toFixed(2);
+            document.getElementById('stat-user1-name').textContent = user1Name + '的支出';
+            document.getElementById('stat-user2-total').textContent = user2Total.toFixed(2);
+            document.getElementById('stat-user2-name').textContent = user2Name + '的支出';
+            
+            const total = user1Total + user2Total;
+            const average = total / 2;
+            
+            let resultText = '';
+            if (total === 0) {
+                resultText = '暂无已确认的支出';
+            } else if (Math.abs(user1Total - user2Total) < 0.01) {
+                resultText = '✅ 两人支出持平，无需结算';
+            } else if (user1Total > user2Total) {
+                const diff = (user1Total - user2Total).toFixed(2);
+                resultText = `${user2Name} 需要给 ${user1Name} ${diff} 元`;
+            } else {
+                const diff = (user2Total - user1Total).toFixed(2);
+                resultText = `${user1Name} 需要给 ${user2Name} ${diff} 元`;
+            }
+            document.getElementById('settlement-result').textContent = resultText;
+            
+            // 更新图表
+            updateCategoryChart(confirmed);
+        }
+
+        function updateCategoryChart(records) {
+            const categories = {};
+            records.forEach(r => {
+                categories[r.category] = (categories[r.category] || 0) + r.amount;
+            });
+            
+            const ctx = document.getElementById('category-chart').getContext('2d');
+            
+            if (categoryChart) {
+                categoryChart.destroy();
+            }
+            
+            if (Object.keys(categories).length === 0) {
+                return;
+            }
+            
+            categoryChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(categories),
+                    datasets: [{
+                        data: Object.values(categories),
+                        backgroundColor: ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        function updateBadge() {
+            const records = Storage.get('records') || [];
+            const otherUser = currentUser === 'user1' ? 'user2' : 'user1';
+            const pendingCount = records.filter(r => r.userId === otherUser && r.status === 'pending').length;
+            const pendingDeleteCount = records.filter(r => r.status === 'pending_delete' && r.deleteRequestedBy !== currentUser).length;
+            const totalPending = pendingCount + pendingDeleteCount;
+            
+            const badge = document.getElementById('pending-badge');
+            if (totalPending > 0) {
+                badge.textContent = totalPending;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        // ==================== AI分析 ====================
+        function getDateRange(period) {
+            const today = new Date();
+            let start, end;
+
+            switch (period) {
+                case 'today':
+                    start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+                    break;
+                case 'week':
+                    const weekStart = new Date(today);
+                    weekStart.setDate(today.getDate() - today.getDay());
+                    weekStart.setHours(0, 0, 0, 0);
+                    start = weekStart;
+                    end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+                    break;
+                case 'month':
+                    start = new Date(today.getFullYear(), today.getMonth(), 1);
+                    end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+                    break;
+                case 'year':
+                    start = new Date(today.getFullYear(), 0, 1);
+                    end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+                    break;
+                case 'all':
+                    start = null;
+                    end = null;
+                    break;
+            }
+            return { start, end };
+        }
+
+        function loadApiKey() {
+            const savedKey = Storage.get('deepseek_api_key');
+            if (savedKey) {
+                document.getElementById('api-key').value = savedKey;
+            }
+        }
+
+        function saveApiKey(key) {
+            Storage.set('deepseek_api_key', key);
+        }
+
+        function getRecordsForPeriod(period) {
+            const records = Storage.get('records') || [];
+            const { start, end } = getDateRange(period);
+            const confirmed = records.filter(r => r.status === 'confirmed');
+            
+            if (!start || !end) {
+                return confirmed;
+            }
+            
+            return confirmed.filter(r => {
+                const recordDate = new Date(r.createdAt);
+                return recordDate >= start && recordDate <= end;
+            });
+        }
+
+        function formatRecordsForAI(records, analysisType) {
+            const users = Storage.get('users') || {};
+            const user1Name = users.user1?.name || '用户A';
+            const user2Name = users.user2?.name || '用户B';
+            
+            if (analysisType === 'independent') {
+                const user1Records = records.filter(r => r.userId === 'user1');
+                const user2Records = records.filter(r => r.userId === 'user2');
+                
+                return `
+${user1Name}的账目：
+${formatUserRecords(user1Records)}
+
+${user2Name}的账目：
+${formatUserRecords(user2Records)}
+`;
+            } else {
+                return `
+团队总账目（按时间排序）：
+${records.map(r => {
+    const userName = r.userId === 'user1' ? user1Name : user2Name;
+    return `- ${new Date(r.createdAt).toLocaleDateString()} ${userName} ${r.type === 'income' ? '收入' : '支出'} ${r.amount}元 (${r.category}: ${r.description})`;
+}).join('\n')}
+`;
+            }
+        }
+
+        function formatUserRecords(records) {
+            if (records.length === 0) return '暂无记录';
+            
+            const totalIncome = records.filter(r => r.type === 'income').reduce((sum, r) => sum + r.amount, 0);
+            const totalExpense = records.filter(r => r.type === 'expense').reduce((sum, r) => sum + r.amount, 0);
+            
+            const categoryStats = {};
+            records.filter(r => r.type === 'expense').forEach(r => {
+                categoryStats[r.category] = (categoryStats[r.category] || 0) + r.amount;
+            });
+            
+            let result = `总收入: ${totalIncome.toFixed(2)}元\n`;
+            result += `总支出: ${totalExpense.toFixed(2)}元\n`;
+            result += `结余: ${(totalIncome - totalExpense).toFixed(2)}元\n\n`;
+            
+            result += '支出分类统计：\n';
+            for (const [cat, amount] of Object.entries(categoryStats)) {
+                result += `- ${cat}: ${amount.toFixed(2)}元\n`;
+            }
+            
+            return result;
+        }
+
+        async function callDeepSeekAPI(prompt, apiKey) {
+            try {
+                const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: 'deepseek-chat',
+                        messages: [
+                            {
+                                role: 'system',
+                                content: '你是一个专业的财务分析助手。请根据用户提供的记账数据，进行详细的分析，包括：\n1. 收支概况\n2. 消费趋势\n3. 分类占比\n4. 节省建议\n5. 优化方案\n\n请用中文回答，语言通俗易懂，有条理。'
+                            },
+                            {
+                                role: 'user',
+                                content: prompt
+                            }
+                        ],
+                        temperature: 0.7
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error?.message || 'API调用失败');
+                }
+
+                const data = await response.json();
+                return data.choices[0].message.content;
+            } catch (error) {
+                throw error;
+            }
+        }
+
+        async function doAnalysis(analysisType) {
+            const apiKey = document.getElementById('api-key').value.trim();
+            const period = document.getElementById('analysis-period').value;
+            
+            if (!apiKey) {
+                showToast('请先输入API密钥');
+                return;
+            }
+            
+            saveApiKey(apiKey);
+            
+            const records = getRecordsForPeriod(period);
+            
+            if (records.length === 0) {
+                document.getElementById('analysis-result').innerHTML = '<p class="text-gray-400 text-center py-4">该时间段暂无已确认的账目</p>';
+                return;
+            }
+            
+            const users = Storage.get('users') || {};
+            const user1Name = users.user1?.name || '用户A';
+            const user2Name = users.user2?.name || '用户B';
+            
+            const periodNames = {
+                'today': '今日',
+                'week': '本周',
+                'month': '本月',
+                'year': '本年',
+                'all': '全部'
+            };
+            
+            let systemPrompt = '';
+            if (analysisType === 'independent') {
+                systemPrompt = `请对以下两个用户的${periodNames[period]}账目进行独立分析，分别给出每个人的分析报告。
+
+${formatRecordsForAI(records, 'independent')}`;
+            } else {
+                systemPrompt = `请对以下${periodNames[period]}的团队账目进行统筹分析，包括两人的对比分析和整体建议。
+
+团队成员：${user1Name} 和 ${user2Name}
+
+${formatRecordsForAI(records, 'overall')}`;
+            }
+            
+            document.getElementById('analysis-result').innerHTML = '<p class="text-center py-4">🤖 AI分析中，请稍候...</p>';
+            
+            try {
+                const result = await callDeepSeekAPI(systemPrompt, apiKey);
+                document.getElementById('analysis-result').textContent = result;
+            } catch (error) {
+                document.getElementById('analysis-result').innerHTML = `<p class="text-red-500">分析失败：${error.message}</p>`;
+                showToast('分析失败');
+            }
+        }
+
+        // ==================== 工具函数 ====================
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 2000);
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>

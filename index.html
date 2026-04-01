@@ -6,6 +6,7 @@
     <title>团队记账 - 双人协作</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -41,6 +42,7 @@
                 <div class="text-4xl mb-2">💰</div>
                 <h1 class="text-2xl font-bold text-gray-800">团队记账</h1>
                 <p class="text-gray-500 text-sm mt-1">双人协作，账目清晰</p>
+                <div id="sync-status" class="text-xs text-green-500 mt-2 hidden">☁️ 已连接云端同步</div>
             </div>
 
             <!-- 选择账户 -->
@@ -50,15 +52,15 @@
                     <button onclick="selectAccount('user1')" class="w-full p-4 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 transition flex items-center gap-3">
                         <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xl">A</div>
                         <div class="text-left">
-                            <div class="font-semibold text-gray-800" id="select-name-1">用户A</div>
-                            <div class="text-xs text-gray-500" id="select-status-1">未设置</div>
+                            <div id="login-name-1">用户A</div>
+                            <div id="login-status-1" class="text-xs text-gray-500">加载中...</div>
                         </div>
                     </button>
                     <button onclick="selectAccount('user2')" class="w-full p-4 rounded-xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 transition flex items-center gap-3">
                         <div class="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-xl">B</div>
                         <div class="text-left">
-                            <div class="font-semibold text-gray-800" id="select-name-2">用户B</div>
-                            <div class="text-xs text-gray-500" id="select-status-2">未设置</div>
+                            <div id="login-name-2">用户B</div>
+                            <div id="login-status-2" class="text-xs text-gray-500">加载中...</div>
                         </div>
                     </button>
                 </div>
@@ -96,30 +98,33 @@
                     <div id="header-avatar" class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">A</div>
                     <div>
                         <h1 class="font-bold text-gray-800">团队记账</h1>
-                        <p class="text-xs text-gray-500" id="header-username">用户A</p>
+                        <p class="text-xs text-gray-500" id="header-username">欢迎</p>
                     </div>
                 </div>
-                <button onclick="doLogout()" class="text-gray-500 hover:text-gray-700">退出</button>
+                <div class="flex items-center gap-2">
+                    <div id="cloud-status" class="text-green-500 text-sm">☁️ 同步中</div>
+                    <button onclick="doLogout()" class="text-gray-500 hover:text-gray-700">退出</button>
+                </div>
             </div>
         </header>
 
         <!-- 导航标签 -->
         <nav class="bg-white border-b">
             <div class="max-w-lg mx-auto flex">
-                <button onclick="switchTab('my-records')" class="tab-btn flex-1 py-3 text-sm font-medium tab-active" data-tab="my-records">
-                    我的记账
+                <button onclick="switchTab('my-records')" class="tab-btn flex-1 py-4 text-sm font-medium tab-active" data-tab="my-records">
+                    📝 记账
                 </button>
-                <button onclick="switchTab('pending')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="pending">
-                    待确认 <span id="pending-badge" class="hidden bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
+                <button onclick="switchTab('pending')" class="tab-btn flex-1 py-4 text-sm font-medium text-gray-500" data-tab="pending">
+                    ⏳ 待确认 <span id="pending-badge" class="hidden bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">0</span>
                 </button>
-                <button onclick="switchTab('all-records')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="all-records">
-                    所有账目
+                <button onclick="switchTab('all-records')" class="tab-btn flex-1 py-4 text-sm font-medium text-gray-500" data-tab="all-records">
+                    📋 所有账目
                 </button>
-                <button onclick="switchTab('settlement')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="settlement">
-                    核算
+                <button onclick="switchTab('settlement')" class="tab-btn flex-1 py-4 text-sm font-medium text-gray-500" data-tab="settlement">
+                    📊 核算
                 </button>
-                <button onclick="switchTab('ai-analysis')" class="tab-btn flex-1 py-3 text-sm font-medium text-gray-500" data-tab="ai-analysis">
-                    AI分析
+                <button onclick="switchTab('ai-analysis')" class="tab-btn flex-1 py-4 text-sm font-medium text-gray-500" data-tab="ai-analysis">
+                    🤖 AI分析
                 </button>
             </div>
         </nav>
@@ -131,6 +136,7 @@
                 <!-- 快速记账 -->
                 <div class="card p-4 mb-4">
                     <h3 class="font-semibold mb-3">快速记账</h3>
+                    <p class="text-sm text-gray-500 mb-3">添加的记录需要对方确认后生效</p>
                     <input type="text" id="quick-input" placeholder="例如：午餐 35" class="w-full p-3 border rounded-lg mb-3">
                     <div class="flex gap-2 mb-3">
                         <select id="record-type" class="flex-1 p-2 border rounded-lg">
@@ -259,65 +265,274 @@
     <div id="toast" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg hidden z-50"></div>
 
     <script>
-        // ==================== 数据存储 ====================
-        const Storage = {
-            get(key) {
-                const data = localStorage.getItem(key);
-                return data ? JSON.parse(data) : null;
-            },
-            set(key, value) {
-                localStorage.setItem(key, JSON.stringify(value));
-            },
-            remove(key) {
-                localStorage.removeItem(key);
-            }
-        };
+        // ==================== Supabase 配置 ====================
+        const SUPABASE_URL = 'https://ucdxegrjdwttexknipni.supabase.co';
+        const SUPABASE_KEY = 'sbp_226ba569bb801a1f29077d603c8f2b79af87c461';
+        const supabase = window.supabase ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
         // ==================== 应用状态 ====================
         let currentUser = null;
         let selectedAccount = null;
         let currentFilter = 'all';
         let categoryChart = null;
+        let users = { user1: { name: '用户A', password: null }, user2: { name: '用户B', password: null } };
+        let records = [];
+        let subscription = null;
 
         // ==================== 初始化 ====================
-        function init() {
-            updateLoginPage();
-            const saved = Storage.get('current_session');
-            if (saved) {
-                currentUser = saved.userId;
-                showMainApp();
+        async function init() {
+            if (!supabase) {
+                showToast('⚠️ 未连接到Supabase');
+                return;
             }
+
+            // 显示同步状态
+            document.getElementById('sync-status').classList.remove('hidden');
+            document.getElementById('sync-status').textContent = '☁️ 正在连接云端...';
+
+            try {
+                // 加载用户数据
+                await loadUsers();
+                
+                // 加载记录
+                await loadRecords();
+                
+                // 监听实时变化
+                setupRealtimeSubscription();
+                
+                document.getElementById('sync-status').textContent = '☁️ 已连接云端同步';
+                
+                // 检查是否有保存的登录
+                const saved = localStorage.getItem('accounting_login');
+                if (saved) {
+                    const loginData = JSON.parse(saved);
+                    if (loginData.userId) {
+                        currentUser = loginData.userId;
+                        showMainApp();
+                    }
+                }
+                
+                updateLoginPage();
+            } catch (error) {
+                console.error('初始化失败:', error);
+                document.getElementById('sync-status').textContent = '☁️ 云端连接失败';
+                showToast('⚠️ 云端连接失败，使用本地数据');
+                // 降级到本地存储
+                initLocalFallback();
+            }
+        }
+
+        function initLocalFallback() {
+            const savedUsers = localStorage.getItem('accounting_users');
+            if (savedUsers) {
+                users = JSON.parse(savedUsers);
+            }
+            const savedRecords = localStorage.getItem('accounting_records');
+            if (savedRecords) {
+                records = JSON.parse(savedRecords);
+            }
+            
+            const saved = localStorage.getItem('accounting_login');
+            if (saved) {
+                const loginData = JSON.parse(saved);
+                if (loginData.userId) {
+                    currentUser = loginData.userId;
+                    showMainApp();
+                }
+            }
+            
+            updateLoginPage();
+        }
+
+        // ==================== 用户管理 ====================
+        async function loadUsers() {
+            if (!supabase) return;
+            
+            const { data, error } = await supabase
+                .from('users')
+                .select('*');
+            
+            if (error) {
+                console.error('加载用户失败:', error);
+                return;
+            }
+            
+            if (data && data.length > 0) {
+                data.forEach(user => {
+                    if (user.user_id) {
+                        users[user.user_id] = {
+                            name: user.name,
+                            password: user.password
+                        };
+                    }
+                });
+            } else {
+                // 初始化用户表
+                await initUsersTable();
+            }
+        }
+
+        async function initUsersTable() {
+            if (!supabase) return;
+            
+            for (const userId of ['user1', 'user2']) {
+                const { error } = await supabase
+                    .from('users')
+                    .insert([
+                        { user_id: userId, name: userId === 'user1' ? '用户A' : '用户B', password: null }
+                    ]);
+                
+                if (error && error.code !== '23505') {
+                    console.error('初始化用户失败:', error);
+                }
+            }
+        }
+
+        async function saveUser(userId, userData) {
+            if (!supabase) {
+                users[userId] = userData;
+                localStorage.setItem('accounting_users', JSON.stringify(users));
+                return;
+            }
+            
+            const { error } = await supabase
+                .from('users')
+                .upsert([
+                    { user_id: userId, name: userData.name, password: userData.password }
+                ]);
+            
+            if (error) {
+                console.error('保存用户失败:', error);
+            }
+            
+            users[userId] = userData;
+        }
+
+        // ==================== 记录管理 ====================
+        async function loadRecords() {
+            if (!supabase) return;
+            
+            const { data, error } = await supabase
+                .from('records')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (error) {
+                console.error('加载记录失败:', error);
+                return;
+            }
+            
+            records = data || [];
+        }
+
+        async function saveRecord(record) {
+            if (!supabase) {
+                records.push(record);
+                localStorage.setItem('accounting_records', JSON.stringify(records));
+                updateAllViews();
+                return;
+            }
+            
+            const { error } = await supabase
+                .from('records')
+                .insert([record]);
+            
+            if (error) {
+                console.error('保存记录失败:', error);
+                showToast('保存失败');
+            }
+        }
+
+        async function updateRecord(recordId, updates) {
+            if (!supabase) {
+                const index = records.findIndex(r => r.id === recordId);
+                if (index !== -1) {
+                    records[index] = { ...records[index], ...updates };
+                    localStorage.setItem('accounting_records', JSON.stringify(records));
+                }
+                updateAllViews();
+                return;
+            }
+            
+            const { error } = await supabase
+                .from('records')
+                .update(updates)
+                .eq('id', recordId);
+            
+            if (error) {
+                console.error('更新记录失败:', error);
+                showToast('更新失败');
+            }
+        }
+
+        async function deleteRecordFromDB(recordId) {
+            if (!supabase) {
+                records = records.filter(r => r.id !== recordId);
+                localStorage.setItem('accounting_records', JSON.stringify(records));
+                updateAllViews();
+                return;
+            }
+            
+            const { error } = await supabase
+                .from('records')
+                .delete()
+                .eq('id', recordId);
+            
+            if (error) {
+                console.error('删除记录失败:', error);
+                showToast('删除失败');
+            }
+        }
+
+        function setupRealtimeSubscription() {
+            if (!supabase) return;
+            
+            subscription = supabase
+                .channel('public:records')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'records' }, async (payload) => {
+                    console.log('收到实时更新:', payload);
+                    await loadRecords();
+                    updateAllViews();
+                    document.getElementById('cloud-status').textContent = '☁️ 已同步';
+                    setTimeout(() => {
+                        document.getElementById('cloud-status').textContent = '☁️ 同步中';
+                    }, 2000);
+                })
+                .subscribe();
         }
 
         // ==================== 登录页面 ====================
         function updateLoginPage() {
-            const users = Storage.get('users') || {};
+            document.getElementById('login-name-1').textContent = users.user1?.name || '用户A';
+            document.getElementById('login-name-2').textContent = users.user2?.name || '用户B';
             
-            // 更新用户1
-            if (users.user1) {
-                document.getElementById('select-name-1').textContent = users.user1.name;
-                document.getElementById('select-status-1').textContent = '已设置';
-                document.getElementById('select-status-1').className = 'text-xs text-green-500';
+            if (users.user1?.password) {
+                document.getElementById('login-status-1').textContent = '已设置';
+                document.getElementById('login-status-1').className = 'text-xs text-green-500';
+            } else {
+                document.getElementById('login-status-1').textContent = '未设置';
+                document.getElementById('login-status-1').className = 'text-xs text-gray-500';
             }
             
-            // 更新用户2
-            if (users.user2) {
-                document.getElementById('select-name-2').textContent = users.user2.name;
-                document.getElementById('select-status-2').textContent = '已设置';
-                document.getElementById('select-status-2').className = 'text-xs text-green-500';
+            if (users.user2?.password) {
+                document.getElementById('login-status-2').textContent = '已设置';
+                document.getElementById('login-status-2').className = 'text-xs text-green-500';
+            } else {
+                document.getElementById('login-status-2').textContent = '未设置';
+                document.getElementById('login-status-2').className = 'text-xs text-gray-500';
             }
         }
 
         function selectAccount(account) {
             selectedAccount = account;
-            const users = Storage.get('users') || {};
+            const user = users[account];
             
             document.getElementById('login-step-select').classList.add('hidden');
             
-            if (users[account]) {
+            if (user?.password) {
                 // 已设置，显示登录
                 document.getElementById('login-step-login').classList.remove('hidden');
-                document.getElementById('login-welcome').textContent = `欢迎，${users[account].name}`;
+                document.getElementById('login-welcome').textContent = `欢迎，${user.name}`;
             } else {
                 // 未设置，显示设置
                 document.getElementById('login-step-setup').classList.remove('hidden');
@@ -334,7 +549,7 @@
             selectedAccount = null;
         }
 
-        function completeSetup() {
+        async function completeSetup() {
             const name = document.getElementById('setup-username').value.trim();
             const password = document.getElementById('setup-password').value;
             
@@ -347,27 +562,24 @@
                 return;
             }
             
-            const users = Storage.get('users') || {};
-            users[selectedAccount] = { name, password };
-            Storage.set('users', users);
-            
-            currentUser = selectedAccount;
-            if (document.getElementById('remember-me').checked) {
-                Storage.set('current_session', { userId: currentUser });
-            }
+            await saveUser(selectedAccount, { name, password });
             
             showToast('设置成功！');
+            currentUser = selectedAccount;
+            if (document.getElementById('remember-me')?.checked) {
+                localStorage.setItem('accounting_login', JSON.stringify({ userId: currentUser }));
+            }
+            updateLoginPage();
             showMainApp();
         }
 
-        function doLogin() {
-            const password = document.getElementById('login-password').value;
-            const users = Storage.get('users') || {};
+        async function doLogin() {
+            const inputPassword = document.getElementById('login-password').value;
             
-            if (users[selectedAccount].password === password) {
+            if (users[selectedAccount]?.password === inputPassword) {
                 currentUser = selectedAccount;
-                if (document.getElementById('remember-me').checked) {
-                    Storage.set('current_session', { userId: currentUser });
+                if (document.getElementById('remember-me')?.checked) {
+                    localStorage.setItem('accounting_login', JSON.stringify({ userId: currentUser }));
                 }
                 showToast('登录成功！');
                 showMainApp();
@@ -378,7 +590,7 @@
 
         function doLogout() {
             currentUser = null;
-            Storage.remove('current_session');
+            localStorage.removeItem('accounting_login');
             document.getElementById('main-app').classList.add('hidden');
             document.getElementById('login-page').classList.remove('hidden');
             backToSelect();
@@ -390,12 +602,11 @@
             document.getElementById('login-page').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             
-            const users = Storage.get('users') || {};
-            const userName = users[currentUser].name;
+            const user = users[currentUser];
             const avatar = currentUser === 'user1' ? 'A' : 'B';
             const color = currentUser === 'user1' ? 'bg-blue-500' : 'bg-orange-500';
             
-            document.getElementById('header-username').textContent = userName;
+            document.getElementById('header-username').textContent = `欢迎，${user?.name || '用户'}`;
             document.getElementById('header-avatar').textContent = avatar;
             document.getElementById('header-avatar').className = `w-10 h-10 rounded-full ${color} flex items-center justify-center text-white font-bold`;
             
@@ -407,7 +618,6 @@
         }
 
         function switchTab(tab) {
-            // 更新标签样式
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('tab-active');
                 btn.classList.add('text-gray-500');
@@ -415,14 +625,12 @@
             document.querySelector(`[data-tab="${tab}"]`).classList.add('tab-active');
             document.querySelector(`[data-tab="${tab}"]`).classList.remove('text-gray-500');
             
-            // 显示内容
             document.querySelectorAll('.tab-content').forEach(content => {
                 content.classList.add('hidden');
             });
             document.getElementById(`tab-${tab}`).classList.remove('hidden');
             document.getElementById(`tab-${tab}`).classList.add('fade-in');
             
-            // 更新数据
             if (tab === 'my-records') updateMyRecords();
             if (tab === 'pending') updatePendingList();
             if (tab === 'all-records') updateAllRecords();
@@ -431,17 +639,16 @@
         }
 
         // ==================== 记账功能 ====================
-        function addRecord() {
+        async function addRecord() {
             const input = document.getElementById('quick-input').value.trim();
             const type = document.getElementById('record-type').value;
             const category = document.getElementById('record-category').value;
             
             if (!input) {
-                showToast('请输入记账内容');
+                showToast('请输入交易内容');
                 return;
             }
             
-            // 解析金额
             const amountMatch = input.match(/(\d+\.?\d*)/);
             if (!amountMatch) {
                 showToast('请输入金额');
@@ -452,124 +659,104 @@
             const description = input.replace(amountMatch[0], '').trim() || category;
             
             const record = {
-                id: Date.now(),
-                userId: currentUser,
+                id: Date.now().toString(),
+                user_id: currentUser,
                 type,
                 amount,
                 category,
                 description,
+                creator: currentUser,
                 status: 'pending',
-                createdAt: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                date: new Date().toISOString(),
+                tags: []
             };
             
-            const records = Storage.get('records') || [];
-            records.push(record);
-            Storage.set('records', records);
+            await saveRecord(record);
             
             document.getElementById('quick-input').value = '';
             showToast('记账已提交，等待对方确认');
-            updateAllViews();
         }
 
-        function confirmRecord(recordId) {
-            const records = Storage.get('records') || [];
-            const record = records.find(r => r.id === recordId);
+        async function confirmRecord(recordId) {
+            const record = records.find(r => r.id == recordId || r.id === recordId);
             
-            if (record.userId === currentUser) {
+            if (!record) {
+                showToast('记录不存在');
+                return;
+            }
+            
+            if (record.creator === currentUser || record.user_id === currentUser) {
                 showToast('不能确认自己的记账');
                 return;
             }
             
-            record.status = 'confirmed';
-            record.confirmedBy = currentUser;
-            record.confirmedAt = new Date().toISOString();
-            Storage.set('records', records);
+            await updateRecord(recordId, {
+                status: 'confirmed',
+                confirmed_by: currentUser,
+                confirmed_at: new Date().toISOString()
+            });
             
-            showToast('✅ 已确认');
-            updateAllViews();
+            showToast('已确认');
         }
 
-        function rejectRecord(recordId) {
+        async function rejectRecord(recordId) {
             if (!confirm('确定要拒绝这条记账吗？')) return;
             
-            const records = Storage.get('records') || [];
-            const record = records.find(r => r.id === recordId);
+            await updateRecord(recordId, {
+                status: 'rejected',
+                rejected_by: currentUser,
+                rejected_at: new Date().toISOString()
+            });
             
-            record.status = 'rejected';
-            record.rejectedBy = currentUser;
-            record.rejectedAt = new Date().toISOString();
-            Storage.set('records', records);
-            
-            showToast('❌ 已拒绝');
-            updateAllViews();
+            showToast('已拒绝');
         }
 
-        function deleteRecord(recordId) {
-            const records = Storage.get('records') || [];
-            const record = records.find(r => r.id === recordId);
+        async function deleteRecord(recordId) {
+            if (!confirm('删除记录需要对方确认，确定要提交删除申请吗？')) return;
+            
+            const record = records.find(r => r.id == recordId || r.id === recordId);
+            if (!record) {
+                showToast('记录不存在');
+                return;
+            }
+            
+            await updateRecord(recordId, {
+                status: 'pending_delete',
+                delete_requested_by: currentUser,
+                delete_requested_at: new Date().toISOString()
+            });
+            
+            showToast('删除申请已提交，等待对方确认');
+        }
+
+        async function confirmDelete(recordId) {
+            const record = records.find(r => r.id == recordId || r.id === recordId);
             
             if (!record) {
                 showToast('记录不存在');
                 return;
             }
             
-            if (record.status === 'pending') {
-                // 待确认的直接删除
-                if (!confirm('确定要删除这条记账吗？')) return;
-                let filteredRecords = records.filter(r => r.id !== recordId);
-                Storage.set('records', filteredRecords);
-                showToast('已删除');
-                updateAllViews();
-            } else if (record.status === 'confirmed') {
-                // 已确认的需要对方确认删除
-                if (!confirm('删除需要对方确认，确定要提交删除申请吗？')) return;
-                record.status = 'pending_delete';
-                record.deleteRequestedBy = currentUser;
-                record.deleteRequestedAt = new Date().toISOString();
-                Storage.set('records', records);
-                showToast('删除申请已提交，等待对方确认');
-                updateAllViews();
-            }
-        }
-
-        function confirmDelete(recordId) {
-            const records = Storage.get('records') || [];
-            const record = records.find(r => r.id === recordId);
-            
-            if (!record) {
-                showToast('记录不存在');
-                return;
-            }
-            
-            if (record.deleteRequestedBy === currentUser) {
+            if (record.delete_requested_by === currentUser) {
                 showToast('不能确认自己的删除申请');
                 return;
             }
             
-            let filteredRecords = records.filter(r => r.id !== recordId);
-            Storage.set('records', filteredRecords);
-            showToast('✅ 删除已确认');
-            updateAllViews();
+            await deleteRecordFromDB(recordId);
+            showToast('删除已确认');
         }
 
-        function rejectDelete(recordId) {
+        async function rejectDelete(recordId) {
             if (!confirm('确定要取消删除申请吗？')) return;
             
-            const records = Storage.get('records') || [];
-            const record = records.find(r => r.id === recordId);
-            
-            if (!record) {
-                showToast('记录不存在');
-                return;
-            }
-            
-            record.status = 'confirmed';
-            delete record.deleteRequestedBy;
-            delete record.deleteRequestedAt;
-            Storage.set('records', records);
+            await updateRecord(recordId, {
+                status: 'confirmed',
+                delete_requested_by: null,
+                delete_requested_at: null
+            });
             
             showToast('删除申请已取消');
-            updateAllViews();
         }
 
         // ==================== 更新视图 ====================
@@ -582,8 +769,10 @@
         }
 
         function updateMyRecords() {
-            const records = Storage.get('records') || [];
-            const myPending = records.filter(r => r.userId === currentUser && r.status === 'pending');
+            const myPending = records.filter(r => 
+                (r.creator === currentUser || r.user_id === currentUser) && 
+                r.status === 'pending'
+            );
             
             const container = document.getElementById('my-pending-list');
             if (myPending.length === 0) {
@@ -591,7 +780,9 @@
                 return;
             }
             
-            container.innerHTML = myPending.map(r => `
+            container.innerHTML = myPending.map(r => {
+                const userColor = (r.creator || r.user_id) === 'user1' ? 'bg-blue-500' : 'bg-orange-500';
+                return `
                 <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
                     <div>
                         <div class="font-medium">${r.description}</div>
@@ -601,18 +792,17 @@
                         <div class="font-bold ${r.type === 'income' ? 'text-green-600' : 'text-red-600'}">
                             ${r.type === 'income' ? '+' : '-'}${r.amount}
                         </div>
-                        <button onclick="deleteRecord(${r.id})" class="text-xs text-red-500 mt-1">删除</button>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         }
 
         function updatePendingList() {
-            const records = Storage.get('records') || [];
             const otherUser = currentUser === 'user1' ? 'user2' : 'user1';
             const pending = records.filter(r => 
-                (r.userId === otherUser && r.status === 'pending') ||
-                (r.status === 'pending_delete' && r.deleteRequestedBy !== currentUser)
+                ((r.creator === otherUser || r.user_id === otherUser) && r.status === 'pending') ||
+                (r.status === 'pending_delete' && r.delete_requested_by !== currentUser)
             );
             
             const container = document.getElementById('pending-confirm-list');
@@ -621,12 +811,11 @@
                 return;
             }
             
-            const users = Storage.get('users') || {};
-            
             container.innerHTML = pending.map(r => {
                 const isDeleteRequest = r.status === 'pending_delete';
-                const recordUser = isDeleteRequest ? r.userId : otherUser;
+                const recordUser = isDeleteRequest ? (r.creator || r.user_id) : (r.creator || r.user_id);
                 const userName = users[recordUser]?.name || (recordUser === 'user1' ? 'A' : 'B');
+                const userColor = recordUser === 'user1' ? 'bg-blue-500' : 'bg-orange-500';
                 
                 let actionButtons = '';
                 if (isDeleteRequest) {
@@ -648,10 +837,15 @@
                 return `
                 <div class="p-4 ${isDeleteRequest ? 'bg-red-50 border-2 border-red-200' : 'bg-yellow-50 border-2 border-yellow-200'} rounded-lg">
                     <div class="flex justify-between items-start mb-3">
-                        <div>
-                            <div class="font-semibold">${isDeleteRequest ? '[删除申请] ' : ''}${r.description}</div>
-                            <div class="text-sm text-gray-500">${userName} · ${r.category}</div>
-                            <div class="text-xs text-gray-400">${new Date(isDeleteRequest ? r.deleteRequestedAt : r.createdAt).toLocaleString()}</div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-full ${userColor} flex items-center justify-center text-white text-sm font-bold">
+                                ${userName.charAt(0)}
+                            </div>
+                            <div>
+                                <div class="font-semibold">${isDeleteRequest ? '[删除申请] ' : ''}${r.description}</div>
+                                <div class="text-sm text-gray-500">${userName} · ${r.category}</div>
+                                <div class="text-xs text-gray-400">${new Date(r.created_at).toLocaleString()}</div>
+                            </div>
                         </div>
                         <div class="font-bold text-lg ${r.type === 'income' ? 'text-green-600' : 'text-red-600'}">
                             ${r.type === 'income' ? '+' : '-'}${r.amount}
@@ -664,23 +858,19 @@
         }
 
         function updateAllRecords() {
-            const records = Storage.get('records') || [];
-            const users = Storage.get('users') || {};
-            
             let filtered = records;
             if (currentFilter !== 'all') {
-                filtered = records.filter(r => r.userId === currentFilter);
+                filtered = records.filter(r => (r.creator || r.user_id) === currentFilter);
             }
             
-            // 只显示已确认的、自己的待确认、pending_delete（所有）
             filtered = filtered.filter(r => {
                 if (r.status === 'confirmed') return true;
-                if (r.userId === currentUser && r.status === 'pending') return true;
+                if ((r.creator === currentUser || r.user_id === currentUser) && r.status === 'pending') return true;
                 if (r.status === 'pending_delete') return true;
                 return false;
             });
             
-            filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             
             const container = document.getElementById('all-records-list');
             if (filtered.length === 0) {
@@ -689,7 +879,10 @@
             }
             
             container.innerHTML = filtered.map(r => {
-                const userName = users[r.userId]?.name || (r.userId === 'user1' ? 'A' : 'B');
+                const recordUser = r.creator || r.user_id;
+                const userName = users[recordUser]?.name || (recordUser === 'user1' ? 'A' : 'B');
+                const userColor = recordUser === 'user1' ? 'bg-blue-500' : 'bg-orange-500';
+                
                 let statusClass, statusText;
                 if (r.status === 'confirmed') {
                     statusClass = 'status-confirmed';
@@ -710,7 +903,7 @@
                 return `
                     <div class="flex items-center justify-between p-3 bg-white rounded-lg border">
                         <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-full ${r.userId === 'user1' ? 'bg-blue-500' : 'bg-orange-500'} flex items-center justify-center text-white text-sm font-bold">
+                            <div class="w-8 h-8 rounded-full ${userColor} flex items-center justify-center text-white text-sm font-bold">
                                 ${userName.charAt(0)}
                             </div>
                             <div>
@@ -734,24 +927,20 @@
 
         function filterAll(filter) {
             currentFilter = filter;
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('bg-purple-100', 'text-purple-700');
-                btn.classList.add('bg-gray-100', 'text-gray-600');
+            document.querySelectorAll('.filter-btn').forEach((btn, i) => {
+                const types = ['all', 'user1', 'user2'];
+                btn.className = types[i] === filter 
+                    ? 'filter-btn flex-1 py-2 rounded-lg font-medium bg-purple-100 text-purple-700 text-sm'
+                    : 'filter-btn flex-1 py-2 rounded-lg font-medium bg-gray-100 text-gray-600 text-sm';
             });
-            event.target.classList.remove('bg-gray-100', 'text-gray-600');
-            event.target.classList.add('bg-purple-100', 'text-purple-700');
             updateAllRecords();
         }
 
         function updateSettlement() {
-            const records = Storage.get('records') || [];
-            const users = Storage.get('users') || {};
-            
-            // 只统计已确认的支出（排除待删除的）
             const confirmed = records.filter(r => r.status === 'confirmed' && r.type === 'expense');
             
-            const user1Total = confirmed.filter(r => r.userId === 'user1').reduce((sum, r) => sum + r.amount, 0);
-            const user2Total = confirmed.filter(r => r.userId === 'user2').reduce((sum, r) => sum + r.amount, 0);
+            const user1Total = confirmed.filter(r => (r.creator || r.user_id) === 'user1').reduce((sum, r) => sum + r.amount, 0);
+            const user2Total = confirmed.filter(r => (r.creator || r.user_id) === 'user2').reduce((sum, r) => sum + r.amount, 0);
             
             const user1Name = users.user1?.name || 'A';
             const user2Name = users.user2?.name || 'B';
@@ -762,13 +951,12 @@
             document.getElementById('stat-user2-name').textContent = user2Name + '的支出';
             
             const total = user1Total + user2Total;
-            const average = total / 2;
             
             let resultText = '';
             if (total === 0) {
                 resultText = '暂无已确认的支出';
             } else if (Math.abs(user1Total - user2Total) < 0.01) {
-                resultText = '✅ 两人支出持平，无需结算';
+                resultText = '两人支出持平，无需结算';
             } else if (user1Total > user2Total) {
                 const diff = (user1Total - user2Total).toFixed(2);
                 resultText = `${user2Name} 需要给 ${user1Name} ${diff} 元`;
@@ -778,7 +966,6 @@
             }
             document.getElementById('settlement-result').textContent = resultText;
             
-            // 更新图表
             updateCategoryChart(confirmed);
         }
 
@@ -788,16 +975,10 @@
                 categories[r.category] = (categories[r.category] || 0) + r.amount;
             });
             
+            if (categoryChart) categoryChart.destroy();
+            if (Object.keys(categories).length === 0) return;
+            
             const ctx = document.getElementById('category-chart').getContext('2d');
-            
-            if (categoryChart) {
-                categoryChart.destroy();
-            }
-            
-            if (Object.keys(categories).length === 0) {
-                return;
-            }
-            
             categoryChart = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
@@ -817,10 +998,13 @@
         }
 
         function updateBadge() {
-            const records = Storage.get('records') || [];
             const otherUser = currentUser === 'user1' ? 'user2' : 'user1';
-            const pendingCount = records.filter(r => r.userId === otherUser && r.status === 'pending').length;
-            const pendingDeleteCount = records.filter(r => r.status === 'pending_delete' && r.deleteRequestedBy !== currentUser).length;
+            const pendingCount = records.filter(r => 
+                ((r.creator === otherUser || r.user_id === otherUser) && r.status === 'pending')
+            ).length;
+            const pendingDeleteCount = records.filter(r => 
+                r.status === 'pending_delete' && r.delete_requested_by !== currentUser
+            ).length;
             const totalPending = pendingCount + pendingDeleteCount;
             
             const badge = document.getElementById('pending-badge');
@@ -833,6 +1017,17 @@
         }
 
         // ==================== AI分析 ====================
+        function loadApiKey() {
+            const savedKey = localStorage.getItem('deepseek_api_key');
+            if (savedKey) {
+                document.getElementById('api-key').value = savedKey;
+            }
+        }
+
+        function saveApiKey(key) {
+            localStorage.setItem('deepseek_api_key', key);
+        }
+
         function getDateRange(period) {
             const today = new Date();
             let start, end;
@@ -865,60 +1060,45 @@
             return { start, end };
         }
 
-        function loadApiKey() {
-            const savedKey = Storage.get('deepseek_api_key');
-            if (savedKey) {
-                document.getElementById('api-key').value = savedKey;
-            }
-        }
-
-        function saveApiKey(key) {
-            Storage.set('deepseek_api_key', key);
-        }
-
         function getRecordsForPeriod(period) {
-            const records = Storage.get('records') || [];
             const { start, end } = getDateRange(period);
-            const confirmed = records.filter(r => r.status === 'confirmed');
+            let filtered = records.filter(r => r.status === 'confirmed');
             
-            if (!start || !end) {
-                return confirmed;
+            if (start && end) {
+                filtered = filtered.filter(r => {
+                    const recordDate = new Date(r.created_at);
+                    return recordDate >= start && recordDate <= end;
+                });
             }
-            
-            return confirmed.filter(r => {
-                const recordDate = new Date(r.createdAt);
-                return recordDate >= start && recordDate <= end;
-            });
+            return filtered;
         }
 
         function formatRecordsForAI(records, analysisType) {
-            const users = Storage.get('users') || {};
             const user1Name = users.user1?.name || '用户A';
             const user2Name = users.user2?.name || '用户B';
             
             if (analysisType === 'independent') {
-                const user1Records = records.filter(r => r.userId === 'user1');
-                const user2Records = records.filter(r => r.userId === 'user2');
+                const user1Records = records.filter(r => (r.creator || r.user_id) === 'user1');
+                const user2Records = records.filter(r => (r.creator || r.user_id) === 'user2');
                 
-                return `
-${user1Name}的账目：
-${formatUserRecords(user1Records)}
+                return `${user1Name}的账目：
+${formatUserRecords(user1Records, user1Name)}
 
 ${user2Name}的账目：
-${formatUserRecords(user2Records)}
+${formatUserRecords(user2Records, user2Name)}
 `;
             } else {
-                return `
-团队总账目（按时间排序）：
+                return `团队总账目（按时间排序）：
 ${records.map(r => {
-    const userName = r.userId === 'user1' ? user1Name : user2Name;
-    return `- ${new Date(r.createdAt).toLocaleDateString()} ${userName} ${r.type === 'income' ? '收入' : '支出'} ${r.amount}元 (${r.category}: ${r.description})`;
+    const recordUser = r.creator || r.user_id;
+    const userName = recordUser === 'user1' ? user1Name : user2Name;
+    return `- ${new Date(r.created_at).toLocaleDateString()} ${userName} ${r.type === 'income' ? '收入' : '支出'} ${r.amount}元 (${r.category}: ${r.description})`;
 }).join('\n')}
 `;
             }
         }
 
-        function formatUserRecords(records) {
+        function formatUserRecords(records, userName) {
             if (records.length === 0) return '暂无记录';
             
             const totalIncome = records.filter(r => r.type === 'income').reduce((sum, r) => sum + r.amount, 0);
@@ -954,7 +1134,7 @@ ${records.map(r => {
                         messages: [
                             {
                                 role: 'system',
-                                content: '你是一个专业的财务分析助手。请根据用户提供的记账数据，进行详细的分析，包括：\n1. 收支概况\n2. 消费趋势\n3. 分类占比\n4. 节省建议\n5. 优化方案\n\n请用中文回答，语言通俗易懂，有条理。'
+                                content: '你是一个专业的财务分析助手。请根据用户提供的记账数据，进行详细的分析，包括：1. 收支概况 2. 消费趋势 3. 分类占比 4. 节省建议 5. 优化方案。请用中文回答，语言通俗易懂，有条理。'
                             },
                             {
                                 role: 'user',
@@ -988,14 +1168,13 @@ ${records.map(r => {
             
             saveApiKey(apiKey);
             
-            const records = getRecordsForPeriod(period);
+            const periodRecords = getRecordsForPeriod(period);
             
-            if (records.length === 0) {
+            if (periodRecords.length === 0) {
                 document.getElementById('analysis-result').innerHTML = '<p class="text-gray-400 text-center py-4">该时间段暂无已确认的账目</p>';
                 return;
             }
             
-            const users = Storage.get('users') || {};
             const user1Name = users.user1?.name || '用户A';
             const user2Name = users.user2?.name || '用户B';
             
@@ -1011,16 +1190,16 @@ ${records.map(r => {
             if (analysisType === 'independent') {
                 systemPrompt = `请对以下两个用户的${periodNames[period]}账目进行独立分析，分别给出每个人的分析报告。
 
-${formatRecordsForAI(records, 'independent')}`;
+${formatRecordsForAI(periodRecords, 'independent')}`;
             } else {
                 systemPrompt = `请对以下${periodNames[period]}的团队账目进行统筹分析，包括两人的对比分析和整体建议。
 
 团队成员：${user1Name} 和 ${user2Name}
 
-${formatRecordsForAI(records, 'overall')}`;
+${formatRecordsForAI(periodRecords, 'overall')}`;
             }
             
-            document.getElementById('analysis-result').innerHTML = '<p class="text-center py-4">🤖 AI分析中，请稍候...</p>';
+            document.getElementById('analysis-result').innerHTML = '<p class="text-center py-4">AI分析中，请稍候...</p>';
             
             try {
                 const result = await callDeepSeekAPI(systemPrompt, apiKey);
